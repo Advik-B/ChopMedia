@@ -21,6 +21,20 @@ This is a Rust rewrite of the original C#/MonoGame/ImGui.NET prototype in
 cargo run --release
 ```
 
+## Prebuilt packages (GitHub Actions)
+
+The `Build desktop packages` workflow publishes artifacts for:
+
+- **Windows** (`ChopMedia-windows-thin`, `ChopMedia-windows-fat`)
+- **macOS** (`ChopMedia-macos-thin`, `ChopMedia-macos-fat`) as a proper
+  `ChopMedia.app` bundle
+- **Linux** (`ChopMedia-linux-thin`, `ChopMedia-linux-fat`)
+
+Package variants:
+
+- **thin**: only the app
+- **fat**: app + bundled `ffmpeg` and `ffprobe`
+
 ## Dual-mode binary
 
 The same executable doubles as a CLI:
