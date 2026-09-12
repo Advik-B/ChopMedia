@@ -1,4 +1,7 @@
-# Build output
+# Rust build output
+/target
+
+# C#/MonoGame build output (old_code)
 bin/
 obj/
 .vs/
