@@ -1,0 +1,11 @@
+# Build output
+bin/
+obj/
+.vs/
+
+# IDE
+.idea/
+*.user
+
+# ImGui runtime state
+imgui.ini

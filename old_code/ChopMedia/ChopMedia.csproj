@@ -1,0 +1,47 @@
+﻿<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <TargetFramework>net9.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
+	
+<ApplicationIcon>Content/Icons/App.ico</ApplicationIcon>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\MonoGame.ImGuiNet-main\MonoGame.ImGuiNet\Monogame.ImGuiNet.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <PackageReference Include="NativeFileDialogSharp" Version="0.6.0-alpha" />
+    <PackageReference Include="NAudio" Version="2.2.1" />
+    <PackageReference Include="OpenCvSharp4" Version="4.11.0.20250507" />
+    <PackageReference Include="OpenCvSharp4.Windows" Version="4.11.0.20250507" />
+  </ItemGroup>
+  
+  <ItemGroup>
+  <Content Include="Content\**\*.*">
+    <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+  </Content>
+</ItemGroup>
+  
+  <ItemGroup>
+    <None Remove="imgui.ini" />
+  </ItemGroup>
+  <PropertyGroup Condition="'$(Configuration)'=='Release'">
+  <OutputType>WinExe</OutputType> <!-- Hides console -->
+</PropertyGroup>
+
+<PropertyGroup Condition="'$(Configuration)'=='Debug'">
+  <OutputType>Exe</OutputType> <!-- Shows console -->
+</PropertyGroup>
+
+<ItemGroup>
+  <None Include="Content/Icons/App.ico" />
+</ItemGroup>
+
+
+
+</Project>
