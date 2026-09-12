@@ -1,0 +1,167 @@
+name: Build desktop packages
+
+on:
+  workflow_dispatch:
+  push:
+    tags:
+      - "v*"
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    name: ${{ matrix.target_name }}-${{ matrix.variant }}
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        variant: [thin, fat]
+        include:
+          - os: ubuntu-latest
+            target_name: linux
+            exe_name: ChopMedia
+          - os: windows-latest
+            target_name: windows
+            exe_name: ChopMedia.exe
+          - os: macos-latest
+            target_name: macos
+            exe_name: ChopMedia
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Cache Rust build
+        uses: Swatinem/rust-cache@v2
+
+      - name: Build release binary
+        shell: bash
+        run: cargo build --release --locked
+
+      - name: Acquire ffmpeg on Linux (fat only)
+        if: matrix.variant == 'fat' && runner.os == 'Linux'
+        shell: bash
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y ffmpeg
+          mkdir -p bundled-ffmpeg
+          cp "$(command -v ffmpeg)" bundled-ffmpeg/ffmpeg
+          cp "$(command -v ffprobe)" bundled-ffmpeg/ffprobe
+
+      - name: Acquire ffmpeg on Windows (fat only)
+        if: matrix.variant == 'fat' && runner.os == 'Windows'
+        shell: bash
+        run: |
+          curl -L -o ffmpeg.zip https://www.gyan.dev/ffmpeg/builds/ffmpeg-release-essentials.zip
+          7z x ffmpeg.zip >/dev/null
+          ffmpeg_root="$(find . -maxdepth 1 -type d -name 'ffmpeg-*' | head -n1)"
+          mkdir -p bundled-ffmpeg
+          cp "$ffmpeg_root/bin/ffmpeg.exe" bundled-ffmpeg/ffmpeg.exe
+          cp "$ffmpeg_root/bin/ffprobe.exe" bundled-ffmpeg/ffprobe.exe
+
+      - name: Acquire ffmpeg on macOS (fat only)
+        if: matrix.variant == 'fat' && runner.os == 'macOS'
+        shell: bash
+        run: |
+          if ! command -v ffmpeg >/dev/null || ! command -v ffprobe >/dev/null; then
+            brew update
+            brew install ffmpeg
+          fi
+          mkdir -p bundled-ffmpeg
+          cp "$(command -v ffmpeg)" bundled-ffmpeg/ffmpeg
+          cp "$(command -v ffprobe)" bundled-ffmpeg/ffprobe
+
+      - name: Assemble package
+        shell: bash
+        run: |
+          set -euo pipefail
+          rm -rf package
+          mkdir -p package
+
+          binary_path="target/release/${{ matrix.exe_name }}"
+
+          if [[ "${{ runner.os }}" == "macOS" ]]; then
+            app_dir="package/ChopMedia.app"
+            mkdir -p "$app_dir/Contents/MacOS" "$app_dir/Contents/Resources"
+
+            if [[ "${{ matrix.variant }}" == "fat" ]]; then
+              cp "$binary_path" "$app_dir/Contents/MacOS/ChopMedia-bin"
+              printf '%s\n' '#!/usr/bin/env bash' \
+                'SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"' \
+                'export PATH="$SCRIPT_DIR/../Resources/ffmpeg:$PATH"' \
+                'exec "$SCRIPT_DIR/ChopMedia-bin" "$@"' \
+                > "$app_dir/Contents/MacOS/ChopMedia"
+              chmod +x "$app_dir/Contents/MacOS/ChopMedia" "$app_dir/Contents/MacOS/ChopMedia-bin"
+              mkdir -p "$app_dir/Contents/Resources/ffmpeg"
+              cp bundled-ffmpeg/ffmpeg "$app_dir/Contents/Resources/ffmpeg/ffmpeg"
+              cp bundled-ffmpeg/ffprobe "$app_dir/Contents/Resources/ffmpeg/ffprobe"
+              chmod +x "$app_dir/Contents/Resources/ffmpeg/ffmpeg" "$app_dir/Contents/Resources/ffmpeg/ffprobe"
+            else
+              cp "$binary_path" "$app_dir/Contents/MacOS/ChopMedia"
+              chmod +x "$app_dir/Contents/MacOS/ChopMedia"
+            fi
+
+            printf '%s\n' \
+              '<?xml version="1.0" encoding="UTF-8"?>' \
+              '<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">' \
+              '<plist version="1.0">' \
+              '<dict>' \
+              '  <key>CFBundleDisplayName</key>' \
+              '  <string>ChopMedia</string>' \
+              '  <key>CFBundleExecutable</key>' \
+              '  <string>ChopMedia</string>' \
+              '  <key>CFBundleIdentifier</key>' \
+              '  <string>com.chopmedia.app</string>' \
+              '  <key>CFBundleName</key>' \
+              '  <string>ChopMedia</string>' \
+              '  <key>CFBundlePackageType</key>' \
+              '  <string>APPL</string>' \
+              '  <key>CFBundleShortVersionString</key>' \
+              '  <string>${{ github.ref_name }}</string>' \
+              '  <key>CFBundleVersion</key>' \
+              '  <string>${{ github.run_number }}</string>' \
+              '  <key>LSMinimumSystemVersion</key>' \
+              '  <string>12.0</string>' \
+              '</dict>' \
+              '</plist>' \
+              > "$app_dir/Contents/Info.plist"
+          else
+            mkdir -p package/ChopMedia
+            if [[ "${{ matrix.variant }}" == "fat" ]]; then
+              mkdir -p package/ChopMedia/ffmpeg
+              if [[ "${{ runner.os }}" == "Windows" ]]; then
+                cp "$binary_path" "package/ChopMedia/${{ matrix.exe_name }}"
+                cp bundled-ffmpeg/ffmpeg.exe package/ChopMedia/ffmpeg/ffmpeg.exe
+                cp bundled-ffmpeg/ffprobe.exe package/ChopMedia/ffmpeg/ffprobe.exe
+                printf '%s\n' \
+                  '@echo off' \
+                  'set "PATH=%~dp0ffmpeg;%PATH%"' \
+                  'start "" "%~dp0ChopMedia.exe" %*' \
+                  > package/ChopMedia/ChopMedia.bat
+              else
+                cp "$binary_path" package/ChopMedia/ChopMedia-bin
+                cp bundled-ffmpeg/ffmpeg package/ChopMedia/ffmpeg/ffmpeg
+                cp bundled-ffmpeg/ffprobe package/ChopMedia/ffmpeg/ffprobe
+                chmod +x package/ChopMedia/ChopMedia-bin package/ChopMedia/ffmpeg/ffmpeg package/ChopMedia/ffmpeg/ffprobe
+                printf '%s\n' '#!/usr/bin/env bash' \
+                  'SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"' \
+                  'export PATH="$SCRIPT_DIR/ffmpeg:$PATH"' \
+                  'exec "$SCRIPT_DIR/ChopMedia-bin" "$@"' \
+                  > package/ChopMedia/ChopMedia
+                chmod +x package/ChopMedia/ChopMedia
+              fi
+            else
+              cp "$binary_path" "package/ChopMedia/${{ matrix.exe_name }}"
+            fi
+          fi
+
+      - name: Upload package artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: ChopMedia-${{ matrix.target_name }}-${{ matrix.variant }}
+          path: package
+          if-no-files-found: error
